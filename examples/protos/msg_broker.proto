@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package msg;
+
+service Frame {
+  rpc CheckId (IdData) returns (Response){}
+  rpc RecvMsg (IdData) returns (stream RecvData){}
+  rpc SendMsg (stream SendData) returns (Response){}
+}
+
+// T_1,T_2,T_3,T_4 is timestamp
+// T1 before send_msg() in send
+// T2 data arrive at svr
+// T3 before recv_msg() in svr
+// T4 data arrive at recv
+
+message IdData {
+  int32 length = 1;
+  int32 command = 2;
+  int32 dest = 3;
+  int32 msgid = 4;
+}
+
+message SendData {
+  int32 length = 1;
+  int32 command = 2;
+  int32 dest = 3;
+  string message = 4;
+  double T_1 = 5;
+  double T_2 = 6;
+  double T_3 = 7;
+  double T_4 = 8;
+}
+
+message RecvData {
+  int32 length = 1;
+  int32 command = 2;
+  int32 dest = 3;
+  int32 msgid = 4;
+  string message = 5;
+  double T_1 = 6;
+  double T_2 = 7;
+  double T_3 = 8;
+  double T_4 = 9;   
+}
+
+message Response {
+  int32 length = 1;
+  int32 command = 2;
+  int32 dest = 3;
+  int32 msgid = 4;
+  int32 rescode = 5;
+}
