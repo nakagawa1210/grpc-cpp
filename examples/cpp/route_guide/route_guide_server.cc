@@ -22,6 +22,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <queue>
 
 #include <grpc/grpc.h>
 #include <grpcpp/security/server_credentials.h>
@@ -55,6 +56,7 @@ using routeguide::IdData;
 
 using std::chrono::system_clock;
 
+std::queue<SendData> data_queue_;
 float ConvertToRadians(float num) { return num * 3.1415926 / 180; }
 
 // The formula is based on http://mathforum.org/library/drmath/view/51879.html
@@ -105,9 +107,28 @@ class RouteGuideImpl final : public RouteGuide::Service {
                       const routeguide::IdData* iddata,
                       ServerWriter<RecvData>* writer) override {
     std::cout << iddata->length() << std::endl;
+    SendData qdata;
+    RecvData recvdata;
     
     for (const RecvData& recvdata : recvdata_list_) {
         writer->Write(recvdata);
+    }
+    while (!data_queue_.empty()) {
+      qdata = data_queue_.front();
+      
+      recvdata.set_length(qdata.length());
+      recvdata.set_command(qdata.command());
+      recvdata.set_dest(qdata.dest());
+      recvdata.set_msgid(9);
+      recvdata.set_message(qdata.message());
+      recvdata.set_t_1(qdata.t_1());
+      recvdata.set_t_2(qdata.t_2());
+      recvdata.set_t_3(qdata.t_3());
+      recvdata.set_t_4(qdata.t_4());
+
+      writer->Write(recvdata);
+
+      data_queue_.pop();
     }
     return Status::OK;
   }
@@ -122,7 +143,8 @@ class RouteGuideImpl final : public RouteGuide::Service {
 
     // system_clock::time_point start_time = system_clock::now();
     while (reader->Read(&senddata)) {
-      std::cout << senddata.dest() << std::endl;
+      //std::cout << senddata.dest() << std::endl;
+      data_queue_.push(senddata);
       // point_count++;
       //if (!GetFeatureName(point, feature_list_).empty()) {
       //  feature_count++;

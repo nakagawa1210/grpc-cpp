@@ -68,7 +68,7 @@ target_link_libraries(route_guide_helper
 
 # Targets route_guide_(client|server)
 foreach(_target
-  route_guide_client route_guide_server)
+    route_guide_client route_guide_server recv_client)
   add_executable(${_target}
     "${_target}.cc")
   target_link_libraries(${_target}

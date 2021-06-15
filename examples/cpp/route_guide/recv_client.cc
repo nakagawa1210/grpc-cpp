@@ -52,6 +52,8 @@ using routeguide::Response;
 using routeguide::RecvData;
 using routeguide::IdData;
 
+std::vector<RecvData> recvdata;
+
 Point MakePoint(long latitude, long longitude) {
   Point p;
   p.set_latitude(latitude);
@@ -90,7 +92,7 @@ class RouteGuideClient {
 
   void ListFeatures() {
     routeguide::IdData iddata;
-    RecvData recvdata;
+    RecvData data;
     ClientContext context;
 
     iddata.set_length(1);
@@ -101,8 +103,9 @@ class RouteGuideClient {
     std::unique_ptr<ClientReader<RecvData> > reader(
         stub_->ListFeatures(&context, iddata));
     
-    while (reader->Read(&recvdata)) {
-      std::cout << "Dest =  " << recvdata.dest() << std::endl;
+    while (reader->Read(&data)) {
+      //std::cout << "Dest =  " << data.dest() << std::endl;
+      recvdata.push_back(data);
     }
     Status status = reader->Finish();
     if (status.ok()) {
@@ -112,11 +115,11 @@ class RouteGuideClient {
     }
   }
 
-  void RecordRoute(int ws) {
+  void RecordRoute() {
     SendData senddata;
     Response stats;
     ClientContext context;
-    const int kPoints = 100000;
+    const int kPoints = 10;
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 
     //std::default_random_engine generator(seed);
@@ -127,7 +130,7 @@ class RouteGuideClient {
     std::unique_ptr<ClientWriter<SendData>> writer(
         stub_->RecordRoute(&context, &stats));
     
-    for (int i = 0; i < ws; i++) {
+    for (int i = 0; i < kPoints; i++) {
       SendData senddata;
       senddata.set_length(1);
       senddata.set_command(2);
@@ -137,7 +140,7 @@ class RouteGuideClient {
       senddata.set_t_2(7);
       senddata.set_t_3(8);
       senddata.set_t_4(9);
-      //std::cout << i << std::endl;
+      std::cout << i << std::endl;
       
     //std::cout << "Visiting point " << f.location().latitude() / kCoordFactor_
     //            << ", " << f.location().longitude() / kCoordFactor_
@@ -195,6 +198,12 @@ class RouteGuideClient {
     }
   }
 
+  void data_print() {
+    for(const RecvData& data : recvdata) {
+      std::cout << data.dest() << std::endl;
+    }
+  }
+  
  private:
   bool GetOneFeature(const Point& point, Feature* feature) {
     ClientContext context;
@@ -226,27 +235,6 @@ class RouteGuideClient {
 
 int main(int argc, char** argv) {
   // Expect only arg: --db_path=path/to/route_guide_db.json.
-  int count;
-  int ws;
-  int loop_count;
-  
-  if(argc > 1) {
-    count = atoi(argv[1]);
-  } else {
-    count = 1000;
-  }
-  if(argc > 2) {
-    ws = atoi(argv[2]);
-  } else {
-    ws = 100;
-  }
-  if(count < ws) {
-    std::cout << "count < ws" << std::endl;
-    return 0;
-  }
-
-  loop_count = count / ws;
-  
   //std::string db = routeguide::GetDbFileContent(argc, argv);
   RouteGuideClient guide(
       grpc::CreateChannel("localhost:50051",
@@ -254,14 +242,13 @@ int main(int argc, char** argv) {
 
   // std::cout << "-------------- GetFeature --------------" << std::endl;
   //guide.GetFeature();
-  for(int i = 0; i < loop_count;i++){
-    std::cout << "loop_count "<<  i << std::endl;
-    guide.RecordRoute(ws);
-  }
-  //std::cout << "-------------- ListFeatures --------------" << std::endl;
-  //guide.ListFeatures();
+  std::cout << "-------------- ListFeatures --------------" << std::endl;
+  guide.ListFeatures();
+  //std::cout << "-------------- RecordRoute --------------" << std::endl;
+  //guide.RecordRoute();
   //std::cout << "-------------- RouteChat --------------" << std::endl;
   //guide.RouteChat();
 
+  guide.data_print();
   return 0;
 }
