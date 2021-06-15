@@ -47,6 +47,10 @@ using routeguide::Rectangle;
 using routeguide::RouteGuide;
 using routeguide::RouteNote;
 using routeguide::RouteSummary;
+using routeguide::SendData;
+using routeguide::Response;
+using routeguide::RecvData;
+using routeguide::IdData;
 
 Point MakePoint(long latitude, long longitude) {
   Point p;
@@ -87,23 +91,20 @@ class RouteGuideClient {
   }
 
   void ListFeatures() {
-    routeguide::Rectangle rect;
-    Feature feature;
+    routeguide::IdData iddata;
+    RecvData recvdata;
     ClientContext context;
 
-    rect.mutable_lo()->set_latitude(400000000);
-    rect.mutable_lo()->set_longitude(-750000000);
-    rect.mutable_hi()->set_latitude(420000000);
-    rect.mutable_hi()->set_longitude(-730000000);
-    std::cout << "Looking for features between 40, -75 and 42, -73"
-              << std::endl;
-
-    std::unique_ptr<ClientReader<Feature> > reader(
-        stub_->ListFeatures(&context, rect));
-    while (reader->Read(&feature)) {
-      std::cout << "Found feature called " << feature.name() << " at "
-                << feature.location().latitude() / kCoordFactor_ << ", "
-                << feature.location().longitude() / kCoordFactor_ << std::endl;
+    iddata.set_length(1);
+    iddata.set_command(2);
+    iddata.set_dest(3);
+    iddata.set_msgid(4);
+    
+    std::unique_ptr<ClientReader<RecvData> > reader(
+        stub_->ListFeatures(&context, iddata));
+    
+    while (reader->Read(&recvdata)) {
+      std::cout << "Dest =  " << recvdata.dest() << std::endl;
     }
     Status status = reader->Finish();
     if (status.ok()) {
@@ -114,38 +115,49 @@ class RouteGuideClient {
   }
 
   void RecordRoute() {
-    Point point;
-    RouteSummary stats;
+    SendData senddata;
+    Response stats;
     ClientContext context;
     const int kPoints = 10;
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 
-    std::default_random_engine generator(seed);
-    std::uniform_int_distribution<int> feature_distribution(
-        0, feature_list_.size() - 1);
-    std::uniform_int_distribution<int> delay_distribution(500, 1500);
+    //std::default_random_engine generator(seed);
+    //std::uniform_int_distribution<int> feature_distribution(
+    //   0, feature_list_.size() - 1);
+    //std::uniform_int_distribution<int> delay_distribution(500, 1500);
 
-    std::unique_ptr<ClientWriter<Point> > writer(
+    std::unique_ptr<ClientWriter<SendData>> writer(
         stub_->RecordRoute(&context, &stats));
+    
     for (int i = 0; i < kPoints; i++) {
-      const Feature& f = feature_list_[feature_distribution(generator)];
-      std::cout << "Visiting point " << f.location().latitude() / kCoordFactor_
-                << ", " << f.location().longitude() / kCoordFactor_
-                << std::endl;
-      if (!writer->Write(f.location())) {
+      SendData senddata;
+      senddata.set_length(1);
+      senddata.set_command(2);
+      senddata.set_dest(i);     
+      senddata.set_message("5");
+      senddata.set_t_1(6);
+      senddata.set_t_2(7);
+      senddata.set_t_3(8);
+      senddata.set_t_4(9);
+      std::cout << i << std::endl;
+      
+    //std::cout << "Visiting point " << f.location().latitude() / kCoordFactor_
+    //            << ", " << f.location().longitude() / kCoordFactor_
+    //            << std::endl;
+      if (!writer->Write(senddata)) {
         // Broken stream.
         break;
       }
-      std::this_thread::sleep_for(
-          std::chrono::milliseconds(delay_distribution(generator)));
+      //  std::this_thread::sleep_for(
+      //    std::chrono::milliseconds(delay_distribution(generator)));
     }
     writer->WritesDone();
     Status status = writer->Finish();
     if (status.ok()) {
-      std::cout << "Finished trip with " << stats.point_count() << " points\n"
-                << "Passed " << stats.feature_count() << " features\n"
-                << "Travelled " << stats.distance() << " meters\n"
-                << "It took " << stats.elapsed_time() << " seconds"
+      std::cout << "Finished trip with " << stats.length() << " points\n"
+                << "Passed " << stats.command() << " features\n"
+                << "Travelled " << stats.dest() << " meters\n"
+                << "It took " << stats.msgid() << " seconds"
                 << std::endl;
     } else {
       std::cout << "RecordRoute rpc failed." << std::endl;
@@ -222,14 +234,14 @@ int main(int argc, char** argv) {
                           grpc::InsecureChannelCredentials()),
       db);
 
-  std::cout << "-------------- GetFeature --------------" << std::endl;
-  guide.GetFeature();
+  // std::cout << "-------------- GetFeature --------------" << std::endl;
+  //guide.GetFeature();
   std::cout << "-------------- ListFeatures --------------" << std::endl;
   guide.ListFeatures();
   std::cout << "-------------- RecordRoute --------------" << std::endl;
   guide.RecordRoute();
-  std::cout << "-------------- RouteChat --------------" << std::endl;
-  guide.RouteChat();
+  //std::cout << "-------------- RouteChat --------------" << std::endl;
+  //guide.RouteChat();
 
   return 0;
 }

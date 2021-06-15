@@ -48,6 +48,11 @@ using routeguide::Rectangle;
 using routeguide::RouteGuide;
 using routeguide::RouteNote;
 using routeguide::RouteSummary;
+using routeguide::SendData;
+using routeguide::Response;
+using routeguide::RecvData;
+using routeguide::IdData;
+
 using std::chrono::system_clock;
 
 float ConvertToRadians(float num) { return num * 3.1415926 / 180; }
@@ -97,50 +102,46 @@ class RouteGuideImpl final : public RouteGuide::Service {
   }
 
   Status ListFeatures(ServerContext* context,
-                      const routeguide::Rectangle* rectangle,
-                      ServerWriter<Feature>* writer) override {
-    auto lo = rectangle->lo();
-    auto hi = rectangle->hi();
-    long left = (std::min)(lo.longitude(), hi.longitude());
-    long right = (std::max)(lo.longitude(), hi.longitude());
-    long top = (std::max)(lo.latitude(), hi.latitude());
-    long bottom = (std::min)(lo.latitude(), hi.latitude());
-    for (const Feature& f : feature_list_) {
-      if (f.location().longitude() >= left &&
-          f.location().longitude() <= right &&
-          f.location().latitude() >= bottom && f.location().latitude() <= top) {
-        writer->Write(f);
-      }
+                      const routeguide::IdData* iddata,
+                      ServerWriter<RecvData>* writer) override {
+    std::cout << iddata->length() << std::endl;
+    
+    for (const RecvData& recvdata : recvdata_list_) {
+        writer->Write(recvdata);
     }
     return Status::OK;
   }
 
-  Status RecordRoute(ServerContext* context, ServerReader<Point>* reader,
-                     RouteSummary* summary) override {
-    Point point;
+  Status RecordRoute(ServerContext* context, ServerReader<SendData>* reader,
+                     Response* response) override {
+    SendData senddata;
     int point_count = 0;
     int feature_count = 0;
     float distance = 0.0;
-    Point previous;
+    //Point previous;
 
-    system_clock::time_point start_time = system_clock::now();
-    while (reader->Read(&point)) {
-      point_count++;
-      if (!GetFeatureName(point, feature_list_).empty()) {
-        feature_count++;
-      }
-      if (point_count != 1) {
-        distance += GetDistance(previous, point);
-      }
-      previous = point;
+    // system_clock::time_point start_time = system_clock::now();
+    while (reader->Read(&senddata)) {
+      std::cout << senddata.dest() << std::endl;
+      // point_count++;
+      //if (!GetFeatureName(point, feature_list_).empty()) {
+      //  feature_count++;
+      //}
+      //if (point_count != 1) {
+      //  distance += GetDistance(previous, point);
+      //}
+      //previous = point;
     }
-    system_clock::time_point end_time = system_clock::now();
-    summary->set_point_count(point_count);
-    summary->set_feature_count(feature_count);
-    summary->set_distance(static_cast<long>(distance));
-    auto secs =
-        std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
-    summary->set_elapsed_time(secs.count());
+    //system_clock::time_point end_time = system_clock::now();
+    response->set_length(senddata.length());
+    response->set_command(senddata.command());
+    response->set_dest(senddata.dest());
+    response->set_msgid(4);
+    response->set_rescode(5);
+    
+    //auto secs =
+    //    std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
+    //summary->set_elapsed_time(secs.count());
 
     return Status::OK;
   }
@@ -164,6 +165,7 @@ class RouteGuideImpl final : public RouteGuide::Service {
 
  private:
   std::vector<Feature> feature_list_;
+  std::vector<RecvData> recvdata_list_;
   std::mutex mu_;
   std::vector<RouteNote> received_notes_;
 };
