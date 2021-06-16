@@ -23,6 +23,8 @@
 #include <memory>
 #include <string>
 #include <queue>
+#include <time.h>
+#include <thread>
 
 #include <grpc/grpc.h>
 #include <grpcpp/security/server_credentials.h>
@@ -106,12 +108,13 @@ class RouteGuideImpl final : public RouteGuide::Service {
   Status ListFeatures(ServerContext* context,
                       const routeguide::IdData* iddata,
                       ServerWriter<RecvData>* writer) override {
-    std::cout << iddata->length() << std::endl;
     SendData qdata;
     RecvData recvdata;
+    struct timespec time;
+    double time_l,time_u,lg_time;
     
-    for (const RecvData& recvdata : recvdata_list_) {
-        writer->Write(recvdata);
+    while (data_queue_.empty()){
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     while (!data_queue_.empty()) {
       qdata = data_queue_.front();
@@ -123,9 +126,15 @@ class RouteGuideImpl final : public RouteGuide::Service {
       recvdata.set_message(qdata.message());
       recvdata.set_t_1(qdata.t_1());
       recvdata.set_t_2(qdata.t_2());
-      recvdata.set_t_3(qdata.t_3());
       recvdata.set_t_4(qdata.t_4());
-
+      
+      clock_gettime(CLOCK_MONOTONIC,&time);
+      time_u = time.tv_sec;
+      time_l = time.tv_nsec;
+      time_l = time_l / 1000000000;      
+      lg_time = time_u + time_l;      
+      recvdata.set_t_3(lg_time);      
+      
       writer->Write(recvdata);
 
       data_queue_.pop();
@@ -136,23 +145,17 @@ class RouteGuideImpl final : public RouteGuide::Service {
   Status RecordRoute(ServerContext* context, ServerReader<SendData>* reader,
                      Response* response) override {
     SendData senddata;
-    int point_count = 0;
-    int feature_count = 0;
-    float distance = 0.0;
-    //Point previous;
-
-    // system_clock::time_point start_time = system_clock::now();
+    struct timespec time;
+    double time_l,time_u,lg_time;    
+ 
     while (reader->Read(&senddata)) {
-      //std::cout << senddata.dest() << std::endl;
+      clock_gettime(CLOCK_MONOTONIC,&time);
+      time_u = time.tv_sec;
+      time_l = time.tv_nsec;
+      time_l = time_l / 1000000000;
+      lg_time = time_u + time_l;      
+      senddata.set_t_2(lg_time);
       data_queue_.push(senddata);
-      // point_count++;
-      //if (!GetFeatureName(point, feature_list_).empty()) {
-      //  feature_count++;
-      //}
-      //if (point_count != 1) {
-      //  distance += GetDistance(previous, point);
-      //}
-      //previous = point;
     }
     //system_clock::time_point end_time = system_clock::now();
     response->set_length(senddata.length());
@@ -200,7 +203,7 @@ void RunServer(const std::string& db_path) {
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server listening on " << server_address << std::endl;
+
   server->Wait();
 }
 

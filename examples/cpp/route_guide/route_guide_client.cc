@@ -22,6 +22,8 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <time.h>
+#include <iomanip>
 
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
@@ -111,54 +113,55 @@ class RouteGuideClient {
       std::cout << "ListFeatures rpc failed." << std::endl;
     }
   }
-
-  void RecordRoute(int ws) {
+  
+  void RecordRoute(int ws, int len) {
     SendData senddata;
     Response stats;
     ClientContext context;
     const int kPoints = 100000;
-    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-
-    //std::default_random_engine generator(seed);
-    //std::uniform_int_distribution<int> feature_distribution(
-    //   0, feature_list_.size() - 1);
-    //std::uniform_int_distribution<int> delay_distribution(500, 1500);
-
-    std::unique_ptr<ClientWriter<SendData>> writer(
-        stub_->RecordRoute(&context, &stats));
+    struct timespec time;
+    double time_l,time_u,lg_time;
+    std::string message;
+    std::string a = "*";
     
+    for (int i = 0; i < 1024 * len; i++) {
+      message = message + a;
+    }
+    
+    std::vector<SendData> data_list;
     for (int i = 0; i < ws; i++) {
-      SendData senddata;
       senddata.set_length(1);
       senddata.set_command(2);
       senddata.set_dest(i);     
-      senddata.set_message("5");
-      senddata.set_t_1(6);
-      senddata.set_t_2(7);
-      senddata.set_t_3(8);
-      senddata.set_t_4(9);
-      //std::cout << i << std::endl;
-      
-    //std::cout << "Visiting point " << f.location().latitude() / kCoordFactor_
-    //            << ", " << f.location().longitude() / kCoordFactor_
-    //            << std::endl;
-      if (!writer->Write(senddata)) {
+      senddata.set_message(message);
+      senddata.set_t_1(1.0);
+      senddata.set_t_2(1.0);
+      senddata.set_t_3(1.0);
+      senddata.set_t_4(1.0);
+      data_list.push_back(senddata);
+    }
+    
+    std::unique_ptr<ClientWriter<SendData>> writer(
+        stub_->RecordRoute(&context, &stats));
+    
+    for (SendData& data : data_list) {
+      clock_gettime(CLOCK_MONOTONIC,&time);
+      time_u = time.tv_sec;
+      time_l = time.tv_nsec;
+      time_l = time_l / 1000000000;
+      lg_time = time_u + time_l;
+      data.set_t_1(lg_time);
+      if (!writer->Write(data)) {
         // Broken stream.
         break;
       }
-      //  std::this_thread::sleep_for(
-      //    std::chrono::milliseconds(delay_distribution(generator)));
     }
     writer->WritesDone();
     Status status = writer->Finish();
     if (status.ok()) {
-      std::cout << "Finished trip with " << stats.length() << " points\n"
-                << "Passed " << stats.command() << " features\n"
-                << "Travelled " << stats.dest() << " meters\n"
-                << "It took " << stats.msgid() << " seconds"
-                << std::endl;
+
     } else {
-      std::cout << "RecordRoute rpc failed." << std::endl;
+
     }
   }
 
@@ -225,9 +228,9 @@ class RouteGuideClient {
 };
 
 int main(int argc, char** argv) {
-  // Expect only arg: --db_path=path/to/route_guide_db.json.
   int count;
   int ws;
+  int len;
   int loop_count;
   
   if(argc > 1) {
@@ -240,6 +243,11 @@ int main(int argc, char** argv) {
   } else {
     ws = 100;
   }
+  if(argc > 3) {
+    len = atoi(argv[3]);
+  } else {
+    len = 1;
+  }
   if(count < ws) {
     std::cout << "count < ws" << std::endl;
     return 0;
@@ -247,21 +255,12 @@ int main(int argc, char** argv) {
 
   loop_count = count / ws;
   
-  //std::string db = routeguide::GetDbFileContent(argc, argv);
   RouteGuideClient guide(
       grpc::CreateChannel("localhost:50051",
                           grpc::InsecureChannelCredentials()));
-
-  // std::cout << "-------------- GetFeature --------------" << std::endl;
-  //guide.GetFeature();
   for(int i = 0; i < loop_count;i++){
-    std::cout << "loop_count "<<  i << std::endl;
-    guide.RecordRoute(ws);
+    guide.RecordRoute(ws,len);
   }
-  //std::cout << "-------------- ListFeatures --------------" << std::endl;
-  //guide.ListFeatures();
-  //std::cout << "-------------- RouteChat --------------" << std::endl;
-  //guide.RouteChat();
 
   return 0;
 }

@@ -22,6 +22,7 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <iomanip>
 
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
@@ -94,24 +95,30 @@ class RouteGuideClient {
     routeguide::IdData iddata;
     RecvData data;
     ClientContext context;
+    struct timespec time;
+    double time_l,time_u,lg_time;
 
     iddata.set_length(1);
     iddata.set_command(2);
     iddata.set_dest(3);
     iddata.set_msgid(4);
-    
+
     std::unique_ptr<ClientReader<RecvData> > reader(
-        stub_->ListFeatures(&context, iddata));
-    
+	stub_->ListFeatures(&context, iddata)); 
     while (reader->Read(&data)) {
-      //std::cout << "Dest =  " << data.dest() << std::endl;
+      clock_gettime(CLOCK_MONOTONIC,&time);
+      time_u = time.tv_sec;
+      time_l = time.tv_nsec;
+      time_l = time_l / 1000000000;
+      lg_time = time_u + time_l;     
+      data.set_t_4(lg_time);
       recvdata.push_back(data);
     }
     Status status = reader->Finish();
     if (status.ok()) {
-      std::cout << "ListFeatures rpc succeeded." << std::endl;
+      //      std::cout << "ListFeatures rpc succeeded." << std::endl;
     } else {
-      std::cout << "ListFeatures rpc failed." << std::endl;
+      //std::cout << "ListFeatures rpc failed." << std::endl;
     }
   }
 
@@ -199,8 +206,11 @@ class RouteGuideClient {
   }
 
   void data_print() {
-    for(const RecvData& data : recvdata) {
-      std::cout << data.dest() << std::endl;
+    std::cout << "num,send,svr_in,svr_out,recv" << std::endl;
+    for(const RecvData& d : recvdata) {    
+      std::cout << std::fixed << std::setprecision(5) << d.dest() << ","
+		<< d.t_1() << "," << d.t_2() << "," << d.t_3() << ","
+		<< d.t_4() << std::endl;
     }
   }
   
@@ -234,21 +244,18 @@ class RouteGuideClient {
 };
 
 int main(int argc, char** argv) {
-  // Expect only arg: --db_path=path/to/route_guide_db.json.
-  //std::string db = routeguide::GetDbFileContent(argc, argv);
+  int count;
+  if(argc > 1) {
+    count = atoi(argv[1]);
+  } else {
+    count = 1000;
+  }
   RouteGuideClient guide(
       grpc::CreateChannel("localhost:50051",
                           grpc::InsecureChannelCredentials()));
-
-  // std::cout << "-------------- GetFeature --------------" << std::endl;
-  //guide.GetFeature();
-  std::cout << "-------------- ListFeatures --------------" << std::endl;
-  guide.ListFeatures();
-  //std::cout << "-------------- RecordRoute --------------" << std::endl;
-  //guide.RecordRoute();
-  //std::cout << "-------------- RouteChat --------------" << std::endl;
-  //guide.RouteChat();
-
+  while (recvdata.size() < count){
+    guide.ListFeatures();
+  }
   guide.data_print();
   return 0;
 }
